@@ -8,7 +8,7 @@
   <style>
     body {
       font-family: 'Vazirmatn', 'Segoe UI', Tahoma, sans-serif;
-      width: 300px;
+      width: 320px;
       padding: 15px;
       direction: rtl;
     }
@@ -31,7 +31,7 @@
       margin-bottom: 15px;
       padding: 10px;
       background-color: #f5f5f5;
-      border-radius: 5px;
+      border-radius: 8px;
     }
     
     .section-title {
@@ -44,6 +44,7 @@
       font-weight: bold;
       margin-bottom: 10px;
       font-family: 'Vazirmatn', 'Segoe UI', Tahoma, sans-serif;
+      word-break: break-all;
     }
     
     .toggle-container {
@@ -182,11 +183,30 @@
       height: 16px;
       margin-left: 5px;
     }
+    
+    .notice {
+      background-color: #fff3cd;
+      color: #856404;
+      padding: 10px;
+      border-radius: 5px;
+      margin-top: 10px;
+      font-size: 12px;
+      display: none;
+    }
+    
+    .version-badge {
+      background-color: #007bff;
+      color: white;
+      padding: 2px 6px;
+      border-radius: 10px;
+      font-size: 11px;
+      margin-right: 5px;
+    }
   </style>
 </head>
 <body>
   <div class="header">
-    <h1 class="title">Dynamic RTL</h1>
+    <h1 class="title">Dynamic RTL <span class="version-badge">1.2</span></h1>
   </div>
   
   <div class="section">
@@ -198,6 +218,10 @@
         <input type="checkbox" id="site-toggle">
         <span class="slider"></span>
       </label>
+    </div>
+    
+    <div id="special-site-notice" class="notice">
+      این سایت دارای تنظیمات ویژه برای بهبود عملکرد میباشد.
     </div>
   </div>
   
@@ -222,8 +246,9 @@
   </div>
   
   <div class="footer">
-    <p>Dynamic RTL v1.1.0</p>
+    <p>Dynamic RTL v1.2.0</p>
     <p>تشخیص خودکار متن فارسی و عربی و تغییر جهت به راست به چپ</p>
+    <p>بهینه شده برای وبسایت‌های پویا و برنامه‌های تحت وب</p>
     <div class="social-links">
       <a href="https://x.com/MrSoroushAhmadi" target="_blank" class="social-link">
         <svg class="social-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="#1DA1F2">
@@ -235,4 +260,4 @@
   
   <script src="popup.js"></script>
 </body>
-</html> 
+</html>
