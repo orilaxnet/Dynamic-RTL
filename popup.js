@@ -5,9 +5,11 @@ document.addEventListener('DOMContentLoaded', function() {
   const defaultEnabledRadio = document.getElementById('default-enabled');
   const defaultDisabledRadio = document.getElementById('default-disabled');
   const currentSiteElement = document.getElementById('current-site');
+  const specialSiteNotice = document.getElementById('special-site-notice');
   
   let currentHostname = '';
   let defaultEnabled = true;
+  let isSpecialSite = false;
   
   // Get current tab information
   chrome.runtime.sendMessage({ action: 'getCurrentTabInfo' }, function(response) {
@@ -16,12 +18,20 @@ document.addEventListener('DOMContentLoaded', function() {
       currentSiteElement.textContent = currentHostname;
       siteToggle.checked = response.isEnabled;
       defaultEnabled = response.defaultEnabled;
+      isSpecialSite = response.isSpecial;
       
       // Set the correct radio button based on the default mode
       if (defaultEnabled) {
         defaultEnabledRadio.checked = true;
       } else {
         defaultDisabledRadio.checked = true;
+      }
+      
+      // Show special site notice if applicable
+      if (isSpecialSite) {
+        specialSiteNotice.style.display = 'block';
+      } else {
+        specialSiteNotice.style.display = 'none';
       }
     }
   });
@@ -74,4 +84,4 @@ document.addEventListener('DOMContentLoaded', function() {
       }
     });
   }
-}); 
+});
