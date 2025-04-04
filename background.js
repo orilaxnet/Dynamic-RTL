@@ -3,7 +3,7 @@
 // Initialize extension settings when installed
 chrome.runtime.onInstalled.addListener(() => {
   // Set default settings
-  chrome.storage.sync.get(['disabledSites', 'enabledSites', 'defaultEnabled'], function(result) {
+  chrome.storage.sync.get(['disabledSites', 'enabledSites', 'defaultEnabled', 'specialSites'], function(result) {
     // Initialize disabledSites if not exists
     if (!result.disabledSites) {
       chrome.storage.sync.set({ disabledSites: [] });
@@ -18,6 +18,18 @@ chrome.runtime.onInstalled.addListener(() => {
     if (result.defaultEnabled === undefined) {
       chrome.storage.sync.set({ defaultEnabled: true });
     }
+    
+    // Initialize specialSites for custom handling
+    if (!result.specialSites) {
+      chrome.storage.sync.set({ 
+        specialSites: {
+          'claude.ai': {
+            inputSelectors: '.prose-sm, .prose, [contenteditable="true"]',
+            specialHandling: true
+          }
+        } 
+      });
+    }
   });
 });
 
@@ -29,10 +41,11 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         const url = new URL(tabs[0].url);
         const hostname = url.hostname;
         
-        chrome.storage.sync.get(['disabledSites', 'enabledSites', 'defaultEnabled'], function(result) {
+        chrome.storage.sync.get(['disabledSites', 'enabledSites', 'defaultEnabled', 'specialSites'], function(result) {
           const defaultEnabled = result.defaultEnabled !== undefined ? result.defaultEnabled : true;
           const disabledSites = result.disabledSites || [];
           const enabledSites = result.enabledSites || [];
+          const specialSites = result.specialSites || {};
           
           let isEnabled;
           
@@ -47,7 +60,8 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
           sendResponse({
             hostname: hostname,
             isEnabled: isEnabled,
-            defaultEnabled: defaultEnabled
+            defaultEnabled: defaultEnabled,
+            isSpecial: specialSites[hostname] !== undefined
           });
         });
       }
@@ -125,4 +139,4 @@ function updateContentScript(enabled, callback) {
       });
     }
   });
-} 
+}
