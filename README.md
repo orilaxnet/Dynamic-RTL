@@ -1,86 +1,84 @@
 # Dynamic RTL
 
-A Chrome extension that automatically detects Persian/Arabic text on web pages and applies RTL (Right-to-Left) direction and appropriate font styling.
+## Overview
+Dynamic RTL is a Chrome extension that automatically detects Persian/Arabic text and applies Right-to-Left (RTL) text direction and appropriate font styling. The extension is designed to work across all websites, with special optimizations for dynamic web applications like Claude.ai.
 
 ## Features
-
-- Automatically detects Persian and Arabic text on any webpage
-- Applies RTL direction and Vazirmatn font to detected text
-- Only applies RTL to paragraphs that start with Persian/Arabic words
-- Works with dynamic content that loads after the page is initially rendered
-- Enhanced real-time detection for input fields, text areas, and contenteditable elements
-- Option to disable the extension for specific websites
-- Option to choose between default-enabled or default-disabled mode for all sites
-- Compatible with Chrome's Manifest V3
+- Automatic detection of Persian/Arabic text
+- Dynamic application of RTL direction to text elements
+- Support for input fields, contenteditable elements, and static text
+- Built-in support for the Vazirmatn font
+- Special handling for dynamic web apps like Claude.ai
+- Site-by-site configuration options
+- Low performance impact through optimized observers and debouncing
 
 ## Installation
 
-### From Chrome Web Store (Coming Soon)
+### From Chrome Web Store
+1. Visit the Chrome Web Store page for Dynamic RTL (link TBD)
+2. Click "Add to Chrome"
+3. Confirm the installation
 
-1. Visit the Chrome Web Store
-2. Search for "Dynamic RTL"
-3. Click "Add to Chrome"
-
-### Manual Installation
-
-1. Download or clone this repository
-2. Open Chrome and navigate to `chrome://extensions/`
-3. Enable "Developer mode" in the top right corner
-4. Click "Load unpacked" and select the folder containing the extension files
-5. The extension should now be installed and active
+### Developer Installation
+1. Clone this repository or download the ZIP archive
+2. Run `node install.js` to download fonts and set up the extension
+3. Open Chrome and navigate to `chrome://extensions/`
+4. Enable "Developer mode" in the top-right corner
+5. Click "Load unpacked" and select the extension directory
+6. The extension should now be installed and active
 
 ## Usage
 
-### Current Site Settings
+### Basic Usage
+The extension works automatically once installed. When you visit a webpage or type in Persian/Arabic:
 
-- To enable or disable the extension on the current site, click on the extension icon in the toolbar and toggle the "Enabled on this site" switch
-- Changes take effect immediately
+1. Text that starts with Persian/Arabic will automatically switch to RTL direction
+2. Input fields will dynamically change direction based on the entered text
+3. The Vazirmatn font will be applied to Persian/Arabic text for better readability
 
-### Global Settings
+### Configuration
+Click the extension icon in the toolbar to access settings:
 
-The extension has two default modes that you can switch between:
+- **Current Site Settings**: Enable/disable the extension for the current website
+- **Global Settings**: Choose the default behavior (enabled or disabled) for all sites
 
-1. **Default Enabled on All Sites (with option to disable on specific sites)**:
-   - In this mode, the extension is enabled on all sites unless you disable it on specific sites
-   - To disable on a specific site, turn off the "Enabled on this site" switch
+### Optimized for Claude.ai
+This extension includes special handling for Claude.ai to ensure smooth operation:
 
-2. **Default Disabled on All Sites (with option to enable on specific sites)**:
-   - In this mode, the extension is disabled on all sites unless you enable it on specific sites
-   - To enable on a specific site, turn on the "Enabled on this site" switch
+- Claude's text input areas are correctly detected and handled
+- RTL direction is applied without interfering with Claude's functionality
+- Performance optimizations to prevent slowdowns during conversations
 
-To switch between these two modes:
-1. Click on the extension icon in the toolbar
-2. Select one of the two radio button options in the "Global Settings" section
+## Troubleshooting
 
-## Technical Details
+If you experience issues with the extension:
 
-- Uses MutationObserver to detect and process dynamically added content
-- Enhanced text detection for input fields, text areas, and contenteditable elements
-- Real-time RTL detection during typing in input fields
-- Multiple event listeners (input, focus, blur, paste) for better text detection
-- Smart detection that only applies RTL to text starting with Persian/Arabic words
-- Implements Manifest V3 for Chrome extension compatibility
-- Uses the Vazirmatn font for optimal Persian/Arabic text display
+1. **Performance Problems**: If a website becomes slow, try disabling the extension for that specific site
+2. **Text Direction Issues**: For input fields that aren't correctly detected, try typing a few more Persian/Arabic characters
+3. **Font Not Loading**: Check if your browser allows loading custom fonts from extensions
+4. **Claude.ai Specific Issues**: Try refreshing the page; the extension will reinitialize
 
-## Recent Improvements
+## Updates in Version 1.2
+- Performance improvements through debouncing and batched processing
+- Special handling for dynamic web applications like Claude.ai
+- Improved font loading mechanism
+- Fixed issues with contenteditable elements
+- Added site-specific optimizations
+- Reduced CPU usage on complex pages
 
-### Version 1.1.0
-- Changed the default mode selection from toggle switch to radio buttons
-- Added X (Twitter) profile link
-- Set "Default Enabled on All Sites" as the pre-selected option
-- Added Vazirmatn font to the extension's user interface
+## For Developers
+If you want to contribute to this extension:
 
-### Version 1.0.0
-- Added option to choose between default-enabled or default-disabled mode for all sites
-- Added smart detection that only applies RTL to text starting with Persian/Arabic words
-- Added real-time RTL detection for input fields and text areas
-- Added support for contenteditable elements
-- Improved handling of dynamically added input elements
-- Enhanced CSS styling for better compatibility with various websites
-- Added focus/blur/paste event handling for more reliable detection
+1. The main content script (`content.js`) handles the core functionality
+2. Special site handling is in the `claude-helper.js` file
+3. Settings management is handled through Chrome's storage API in `background.js`
+4. The install script helps with downloading and packaging required resources
 
 ## License
+[MIT License](LICENSE)
 
+## Contact
+For support or feature requests, please open an issue on the GitHub repository.
 This project is open source and available under the MIT License.
 
 ## Credits
