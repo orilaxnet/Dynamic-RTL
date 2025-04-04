@@ -2,7 +2,12 @@
 
 // Global variables
 let isEnabled = true;
+let isSpecialSite = false;
+let specialSiteConfig = null;
 const SCRIPT_ID = 'dynamic-rtl-styles';
+let debounceTimer = null;
+let mutationQueue = [];
+let processingMutations = false;
 
 // Initialize the extension
 function initExtension() {
@@ -12,11 +17,18 @@ function initExtension() {
     }
 
     // Check if the extension is enabled for this domain
-    chrome.storage.sync.get(['disabledSites', 'enabledSites', 'defaultEnabled'], function(result) {
+    chrome.storage.sync.get(['disabledSites', 'enabledSites', 'defaultEnabled', 'specialSites'], function(result) {
         const currentHost = window.location.hostname;
         const defaultEnabled = result.defaultEnabled !== undefined ? result.defaultEnabled : true;
         const disabledSites = result.disabledSites || [];
         const enabledSites = result.enabledSites || [];
+        const specialSites = result.specialSites || {};
+        
+        // Check if current site needs special handling
+        if (specialSites[currentHost]) {
+            isSpecialSite = true;
+            specialSiteConfig = specialSites[currentHost];
+        }
         
         if (defaultEnabled) {
             // Default enabled mode: site is enabled unless in disabledSites
@@ -30,9 +42,13 @@ function initExtension() {
             // Add styles and start processing
             addStyles();
             loadFonts();
-            setupInputObservers();
-            setupObservers();
-            processDocument();
+            
+            // Wait a bit to ensure DOM is ready before initial processing
+            setTimeout(() => {
+                setupInputObservers();
+                setupObservers();
+                processDocument();
+            }, 500);
         }
     });
 }
@@ -43,7 +59,9 @@ function addStyles() {
     
     const style = document.createElement('style');
     style.id = SCRIPT_ID;
-    style.textContent = `
+    
+    // Base styles for all sites
+    let styleContent = `
         [data-rtl="true"] {
             direction: rtl !important;
             font-family: 'Vazirmatn', Arial, sans-serif !important;
@@ -54,10 +72,6 @@ function addStyles() {
             direction: rtl !important;
             font-family: 'Vazirmatn', Arial, sans-serif !important;
             text-align: right !important;
-        }
-        
-        input[type="text"]:focus, textarea:focus {
-            direction: auto !important;
         }
         
         /* Apply RTL to contenteditable elements */
@@ -74,25 +88,45 @@ function addStyles() {
             text-align: right !important;
         }
     `;
+    
+    // Add claude.ai specific styles if on claude.ai
+    if (window.location.hostname.includes('claude.ai')) {
+        styleContent += `
+            /* Claude.ai specific styles */
+            .claude-textarea[data-rtl="true"] {
+                direction: rtl !important;
+                font-family: 'Vazirmatn', Arial, sans-serif !important;
+                text-align: right !important;
+            }
+            
+            /* Target Claude's main textarea */
+            .prose-sm[data-rtl="true"], 
+            .prose[data-rtl="true"] {
+                direction: rtl !important;
+                text-align: right !important;
+                font-family: 'Vazirmatn', Arial, sans-serif !important;
+            }
+        `;
+    }
+    
+    style.textContent = styleContent;
     document.head.appendChild(style);
 }
 
-// Load the Vazirmatn font
+// Load the Vazirmatn font with preloading
 function loadFonts() {
-    // Preload the Vazirmatn font
-    const fontLink = document.createElement('link');
-    fontLink.href = "https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css";
-    fontLink.rel = "preload";
-    fontLink.as = "style";
-    fontLink.crossOrigin = "anonymous";
-    document.head.appendChild(fontLink);
-
-    // Load the actual font
-    const actualFontLink = document.createElement('link');
-    actualFontLink.href = fontLink.href;
-    actualFontLink.rel = "stylesheet";
-    actualFontLink.crossOrigin = "anonymous";
-    document.head.appendChild(actualFontLink);
+    // Check if font is already loaded to avoid duplicates
+    if (document.querySelector('link[href*="vazirmatn"]')) return;
+    
+    // Use a more reliable CDN
+    const fontUrl = "https://cdn.jsdelivr.net/gh/rastikerdar/vazirmatn@v33.003/Vazirmatn-font-face.css";
+    
+    // Add the font to the head
+    const linkEl = document.createElement('link');
+    linkEl.rel = 'stylesheet';
+    linkEl.href = fontUrl;
+    linkEl.crossOrigin = 'anonymous';
+    document.head.appendChild(linkEl);
 }
 
 // Regular expression to detect Persian or Arabic text
@@ -115,11 +149,51 @@ function startsWithPersianOrArabic(text) {
     return isPersianOrArabic(firstWord);
 }
 
-// Setup observers specifically for input fields
+// Debounce function to prevent too frequent execution
+function debounce(func, delay) {
+    return function() {
+        const context = this;
+        const args = arguments;
+        clearTimeout(debounceTimer);
+        debounceTimer = setTimeout(() => func.apply(context, args), delay);
+    };
+}
+
+// Process mutations in batches
+function processMutationQueue() {
+    if (processingMutations || mutationQueue.length === 0) return;
+    
+    processingMutations = true;
+    
+    // Take at most 20 mutations to process in this batch
+    const batch = mutationQueue.splice(0, 20);
+    
+    try {
+        batch.forEach(node => applyRTL(node));
+    } catch (error) {
+        console.error('Dynamic RTL: Error processing mutations', error);
+    }
+    
+    processingMutations = false;
+    
+    // If there are still mutations in the queue, schedule next batch
+    if (mutationQueue.length > 0) {
+        setTimeout(processMutationQueue, 10);
+    }
+}
+
+// Setup observers specifically for input fields - optimized
 function setupInputObservers() {
-    // Find all input and textarea elements on the page
-    function processInputs() {
+    if (!isEnabled) return;
+    
+    // Function to process inputs with debouncing
+    const processInputs = debounce(() => {
         if (!isEnabled) return;
+        
+        // Handle claude.ai's special elements first if applicable
+        if (isSpecialSite && window.location.hostname.includes('claude.ai')) {
+            handleClaudeAIElements();
+        }
         
         // Process all input fields
         const inputElements = document.querySelectorAll('input[type="text"], input[type="search"], input:not([type]), textarea');
@@ -128,7 +202,7 @@ function setupInputObservers() {
         // Process all contenteditable elements
         const editableElements = document.querySelectorAll('[contenteditable="true"], [contenteditable=""]');
         editableElements.forEach(setupEditableElement);
-    }
+    }, 100);
     
     // Process the document when it's ready
     if (document.readyState === 'loading') {
@@ -140,37 +214,88 @@ function setupInputObservers() {
     // Also process inputs when the page is fully loaded
     window.addEventListener('load', processInputs);
     
-    // Create a MutationObserver to detect new input elements
+    // Create a MutationObserver with reduced priority for input elements
     const inputObserver = new MutationObserver(mutations => {
         if (!isEnabled) return;
         
         let shouldProcessInputs = false;
         
-        mutations.forEach(mutation => {
+        for (const mutation of mutations) {
             if (mutation.type === 'childList' && mutation.addedNodes.length) {
-                mutation.addedNodes.forEach(node => {
+                for (const node of mutation.addedNodes) {
                     if (node.nodeType === Node.ELEMENT_NODE) {
                         // Check if the added node is an input or contains inputs
                         if (node.tagName === 'INPUT' || node.tagName === 'TEXTAREA' || 
                             node.hasAttribute('contenteditable') ||
                             node.querySelector('input, textarea, [contenteditable]')) {
                             shouldProcessInputs = true;
+                            break;
                         }
                     }
-                });
+                }
+                if (shouldProcessInputs) break;
             }
-        });
+        }
         
         if (shouldProcessInputs) {
             processInputs();
         }
     });
     
-    // Start observing the document for added input elements
-    inputObserver.observe(document.documentElement, {
+    // Start observing the document with a more focused approach
+    inputObserver.observe(document.body || document.documentElement, {
         childList: true,
-        subtree: true
+        subtree: true,
+        attributes: false,
+        characterData: false
     });
+}
+
+// Special handler for claude.ai elements
+function handleClaudeAIElements() {
+    if (!window.location.hostname.includes('claude.ai')) return;
+    
+    // Find the main input area in claude.ai
+    // These selectors may need periodic updates if claude.ai changes their DOM structure
+    const claudeSelectors = [
+        'textarea.w-full', // Main textarea
+        '[role="textbox"]', // Contenteditable div sometimes used
+        '[contenteditable="true"]', // Explicit contenteditable fields
+        '.prose-sm', // Text display areas
+        '.prose' // Text display areas
+    ];
+    
+    for (const selector of claudeSelectors) {
+        const elements = document.querySelectorAll(selector);
+        elements.forEach(element => {
+            if (!element.hasAttribute('data-rtl-listener')) {
+                // Special setup for claude.ai elements
+                element.setAttribute('data-rtl-listener', 'true');
+                
+                // Enhanced input event handling for claude.ai
+                element.addEventListener('input', function() {
+                    const text = this.value || this.textContent || '';
+                    if (isPersianOrArabic(text) && startsWithPersianOrArabic(text)) {
+                        this.setAttribute('data-rtl', 'true');
+                        this.classList.add('rtl-input-active');
+                    } else if (text.trim() === '') {
+                        this.removeAttribute('data-rtl');
+                        this.classList.remove('rtl-input-active');
+                    } else {
+                        this.removeAttribute('data-rtl');
+                        this.classList.remove('rtl-input-active');
+                    }
+                });
+                
+                // Check current content
+                const text = element.value || element.textContent || '';
+                if (isPersianOrArabic(text) && startsWithPersianOrArabic(text)) {
+                    element.setAttribute('data-rtl', 'true');
+                    element.classList.add('rtl-input-active');
+                }
+            }
+        });
+    }
 }
 
 // Setup event handlers for an input element
@@ -188,8 +313,8 @@ function setupInputElement(element) {
         element.classList.add('rtl-input-active');
     }
     
-    // Add input event listener for real-time RTL detection
-    element.addEventListener('input', function() {
+    // Use a single event handler for better performance
+    const handleInputChange = function() {
         if (isPersianOrArabic(this.value) && startsWithPersianOrArabic(this.value)) {
             this.setAttribute('data-rtl', 'true');
             this.classList.add('rtl-input-active');
@@ -206,38 +331,17 @@ function setupInputElement(element) {
             this.removeAttribute('data-rtl');
             this.classList.remove('rtl-input-active');
         }
-    });
+    };
     
-    // Also check on focus and blur
-    element.addEventListener('focus', function() {
-        if (isPersianOrArabic(this.value) && startsWithPersianOrArabic(this.value)) {
-            this.setAttribute('data-rtl', 'true');
-            this.classList.add('rtl-input-active');
-        }
-    });
-    
-    element.addEventListener('blur', function() {
-        if (isPersianOrArabic(this.value) && startsWithPersianOrArabic(this.value)) {
-            this.setAttribute('data-rtl', 'true');
-            this.classList.add('rtl-input-active');
-        } else {
-            this.removeAttribute('data-rtl');
-            this.classList.remove('rtl-input-active');
-        }
-    });
+    // Add debounced event listeners
+    element.addEventListener('input', debounce(handleInputChange, 50));
+    element.addEventListener('focus', handleInputChange);
+    element.addEventListener('blur', handleInputChange);
     
     // Handle paste events
     element.addEventListener('paste', function() {
         // Use setTimeout to check the value after paste is complete
-        setTimeout(() => {
-            if (isPersianOrArabic(this.value) && startsWithPersianOrArabic(this.value)) {
-                this.setAttribute('data-rtl', 'true');
-                this.classList.add('rtl-input-active');
-            } else {
-                this.removeAttribute('data-rtl');
-                this.classList.remove('rtl-input-active');
-            }
-        }, 0);
+        setTimeout(handleInputChange.bind(this), 0);
     });
 }
 
@@ -253,8 +357,8 @@ function setupEditableElement(element) {
         element.setAttribute('data-rtl', 'true');
     }
     
-    // Add input event listeners for real-time RTL detection
-    element.addEventListener('input', function() {
+    // Single handler for contenteditable elements
+    const handleContentChange = function() {
         if (isPersianOrArabic(this.textContent) && startsWithPersianOrArabic(this.textContent)) {
             this.setAttribute('data-rtl', 'true');
         } else if (this.textContent.trim() === '') {
@@ -263,22 +367,19 @@ function setupEditableElement(element) {
             // If text doesn't start with Persian/Arabic, remove RTL
             this.removeAttribute('data-rtl');
         }
-    });
+    };
+    
+    // Add debounced event listener
+    element.addEventListener('input', debounce(handleContentChange, 50));
     
     // Handle paste events
     element.addEventListener('paste', function() {
         // Use setTimeout to check the content after paste is complete
-        setTimeout(() => {
-            if (isPersianOrArabic(this.textContent) && startsWithPersianOrArabic(this.textContent)) {
-                this.setAttribute('data-rtl', 'true');
-            } else {
-                this.removeAttribute('data-rtl');
-            }
-        }, 0);
+        setTimeout(handleContentChange.bind(this), 0);
     });
 }
 
-// Function to check and apply RTL and font
+// Function to check and apply RTL and font - optimized
 function applyRTL(element) {
     if (!isEnabled || !element || !element.parentElement) return;
 
@@ -299,12 +400,15 @@ function applyRTL(element) {
                 return;
             }
             
-            // Traverse up to find the most appropriate container
-            while (currentElement &&
-                   currentElement !== document.body &&
-                   currentElement.children.length <= 1) {
+            // Limit the traversal to reduce performance impact
+            let traverseCount = 0;
+            while (currentElement && 
+                  currentElement !== document.body && 
+                  traverseCount < 3 && 
+                  currentElement.children.length <= 1) {
                 currentElement.setAttribute('data-rtl', 'true');
                 currentElement = currentElement.parentElement;
+                traverseCount++;
             }
             if (currentElement && currentElement !== document.body) {
                 currentElement.setAttribute('data-rtl', 'true');
@@ -327,37 +431,80 @@ function applyRTL(element) {
             setupEditableElement(element);
         }
 
-        // Process child nodes
-        Array.from(element.childNodes).forEach(child => applyRTL(child));
+        // Process a limited number of child nodes to improve performance
+        const childNodes = Array.from(element.childNodes);
+        const maxChildNodesToProcess = 20; // Limit processing to prevent freezing
+        
+        for (let i = 0; i < Math.min(childNodes.length, maxChildNodesToProcess); i++) {
+            const child = childNodes[i];
+            // Queue child nodes for processing rather than processing immediately
+            mutationQueue.push(child);
+        }
+        
+        // Process the mutation queue
+        if (!processingMutations) {
+            processMutationQueue();
+        }
     }
 }
 
 // Process the entire document
 function processDocument() {
     if (!isEnabled) return;
-    applyRTL(document.body);
+    
+    // Special handling for claude.ai
+    if (isSpecialSite && window.location.hostname.includes('claude.ai')) {
+        handleClaudeAIElements();
+    }
+    
+    // Process in chunks to avoid freezing the UI
+    const processNodes = (node, startIndex, endIndex) => {
+        const childNodes = Array.from(node.childNodes).slice(startIndex, endIndex);
+        childNodes.forEach(child => mutationQueue.push(child));
+        
+        // Process the mutation queue
+        if (!processingMutations) {
+            processMutationQueue();
+        }
+        
+        // Process next chunk if any
+        if (endIndex < node.childNodes.length) {
+            setTimeout(() => {
+                processNodes(node, endIndex, endIndex + 50);
+            }, 20);
+        }
+    };
+    
+    if (document.body) {
+        processNodes(document.body, 0, 50);
+    }
 }
 
-// Setup MutationObserver to monitor changes in the DOM
+// Setup MutationObserver to monitor changes in the DOM - optimized
 function setupObservers() {
     const observer = new MutationObserver(mutations => {
         if (!isEnabled) return;
         
-        mutations.forEach(mutation => {
+        for (const mutation of mutations) {
             if (mutation.type === 'childList') {
-                mutation.addedNodes.forEach(node => applyRTL(node));
+                mutation.addedNodes.forEach(node => mutationQueue.push(node));
             } else if (mutation.type === 'characterData') {
-                applyRTL(mutation.target);
+                mutationQueue.push(mutation.target);
             }
-        });
+        }
+        
+        // Process in batches for better performance
+        if (!processingMutations) {
+            processMutationQueue();
+        }
     });
 
-    // Start observing the body for changes
+    // Start observing the body with a more performance-friendly configuration
     const observerConfig = {
         childList: true,
         characterData: true,
         subtree: true,
-        characterDataOldValue: true
+        characterDataOldValue: false  // Don't need old value to improve performance
     };
 
     // Wait for body to be available
@@ -367,6 +514,13 @@ function setupObservers() {
         document.addEventListener('DOMContentLoaded', () => {
             observer.observe(document.body, observerConfig);
         });
+    }
+    
+    // Special handling for claude.ai - re-check periodically for new content
+    if (window.location.hostname.includes('claude.ai')) {
+        setInterval(() => {
+            handleClaudeAIElements();
+        }, 2000);
     }
 }
 
@@ -395,13 +549,13 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
     sendResponse({ success: true });
 });
 
-// Initialize when the script loads
+// Initialize when the script loads - with a slight delay to ensure browser is ready
 if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', initExtension);
+    document.addEventListener('DOMContentLoaded', () => setTimeout(initExtension, 100));
 } else {
-    initExtension();
+    setTimeout(initExtension, 100);
 }
 
-// Handle dynamic content loading
-window.addEventListener('load', processDocument);
-document.addEventListener('readystatechange', processDocument); 
+// Handle dynamic content loading with debouncing
+window.addEventListener('load', debounce(processDocument, 200));
+window.addEventListener('readystatechange', debounce(processDocument, 200));
